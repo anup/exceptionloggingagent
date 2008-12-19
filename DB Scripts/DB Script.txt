@@ -14,20 +14,9 @@ CREATE TABLE tbl_ExceptionLog
 	CatchClassName VARCHAR(500),
 	CatchLineNumber INT,
 	StackFrameCount INT,
+	Stack TEXT,
 	PRIMARY KEY (ExceptionId)
-)ENGINE=InnoDB;
-
-CREATE TABLE tbl_StackLog
-(
-	ExceptionId INT NOT NULL,
-	INDEX (ExceptionId),
-	FOREIGN KEY (ExceptionId) REFERENCES tbl_ExceptionLog(ExceptionId) ON UPDATE CASCADE ON DELETE RESTRICT,
-	FrameId INT NOT NULL,
-	MethodName VARCHAR(500),
-	MethodSignature VARCHAR(500),
-	ClassName VARCHAR(500),
-	LineNumber INT	
-)ENGINE=InnoDB;
+)ENGINE=MyISAM;
 
 CREATE TABLE tbl_ExceptionMasterLog
 (
@@ -42,21 +31,9 @@ CREATE TABLE tbl_ExceptionMasterLog
 	CatchClassName VARCHAR(500),
 	CatchLineNumber INT,
 	StackFrameCount INT,
+	Stack TEXT,	
 	PRIMARY KEY (ExceptionId)
-)ENGINE=InnoDB;
-
-CREATE TABLE tbl_StackMasterLog
-(
-	ExceptionId INT NOT NULL,
-	INDEX (ExceptionId),
-	FOREIGN KEY (ExceptionId) REFERENCES tbl_ExceptionMasterLog(ExceptionId) ON UPDATE CASCADE ON DELETE RESTRICT,
-	FrameId INT NOT NULL,
-	MethodName VARCHAR(500),
-	MethodSignature VARCHAR(500),
-	ClassName VARCHAR(500),
-	LineNumber INT	
-)ENGINE=InnoDB;
-
+)ENGINE=MyISAM;
 
 CREATE TABLE tbl_ExceptionMaster
 (
@@ -65,7 +42,7 @@ CREATE TABLE tbl_ExceptionMaster
 	INDEX (Exception(767)),
 	Count INT,
 	PRIMARY KEY (ExceptionId)	
-)ENGINE=InnoDB;
+)ENGINE=MyISAM;
 
 CREATE TABLE tbl_MappingExceptionOccurrence
 (
@@ -75,4 +52,4 @@ CREATE TABLE tbl_MappingExceptionOccurrence
 	OccurrenceExceptionId INT NOT NULL,
 	INDEX (OccurrenceExceptionId),
 	FOREIGN KEY (OccurrenceExceptionId) REFERENCES tbl_ExceptionMasterLog(ExceptionId) ON UPDATE CASCADE ON DELETE RESTRICT	
-)ENGINE=InnoDB; 
+)ENGINE=MyISAM;

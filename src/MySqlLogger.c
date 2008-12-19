@@ -32,11 +32,10 @@ static MYSQL * Conn;
 
 static MYSQL_STMT * MasterLogStmt;
 static MYSQL_STMT * StackLogStmt;
-static MYSQL_BIND bindMasterData[10];
-static MYSQL_BIND bindStackData[6];
+static MYSQL_BIND bindMasterData[11];
 
 static struct MySQLMaster MySQLMasterData;
-static struct MySQLStack MySQLStackData;
+static char StackInfo[MYSQL_BIND_BUFFER_LENGTH];
 
 static EVENT_PROCESSOR_STRUCTURE * EventProcessor;
 
@@ -101,48 +100,13 @@ static int bindMasterQueryParameters(void)
 	bindMasterData[9].is_null = 0;
 	bindMasterData[9].length = 0;
 
+	bindMasterData[10].buffer_type = MYSQL_TYPE_STRING;
+	bindMasterData[10].buffer = (char *) &(MySQLMasterData.StackInfo);
+	bindMasterData[10].is_null = 0;
+	bindMasterData[10].length = &(MySQLMasterData.lenSI);
+	bindMasterData[10].buffer_length = MYSQL_BIND_BUFFER_LENGTH;
+
 	return (mysql_stmt_bind_param(MasterLogStmt, bindMasterData) ? FAILURE
-			: SUCCESS);
-}
-
-static int bindStackQueryParameters(void)
-{
-	memset(bindStackData, 0, sizeof(bindStackData));
-
-	bindStackData[0].buffer_type = MYSQL_TYPE_LONG;
-	bindStackData[0].buffer = (char *) &(MySQLStackData.ExceptionId);
-	bindStackData[0].is_null = 0;
-	bindStackData[0].length = 0;
-
-	bindStackData[1].buffer_type = MYSQL_TYPE_LONG;
-	bindStackData[1].buffer = (char *) &(MySQLStackData.FrameId);
-	bindStackData[1].is_null = 0;
-	bindStackData[1].length = 0;
-
-	bindStackData[2].buffer_type = MYSQL_TYPE_STRING;
-	bindStackData[2].buffer = (char *) MySQLStackData.MethodName;
-	bindStackData[2].is_null = 0;
-	bindStackData[2].length = &(MySQLStackData.lenMN);
-	bindStackData[2].buffer_length = MYSQL_BIND_BUFFER_LENGTH;
-
-	bindStackData[3].buffer_type = MYSQL_TYPE_STRING;
-	bindStackData[3].buffer = (char *) MySQLStackData.MethodSignature;
-	bindStackData[3].is_null = 0;
-	bindStackData[3].length = &(MySQLStackData.lenMSig);
-	bindStackData[2].buffer_length = MYSQL_BIND_BUFFER_LENGTH;
-
-	bindStackData[4].buffer_type = MYSQL_TYPE_STRING;
-	bindStackData[4].buffer = (char *) MySQLStackData.ClassName;
-	bindStackData[4].is_null = 0;
-	bindStackData[4].length = &(MySQLStackData.lenCN);
-	bindStackData[2].buffer_length = MYSQL_BIND_BUFFER_LENGTH;
-
-	bindStackData[5].buffer_type = MYSQL_TYPE_LONG;
-	bindStackData[5].buffer = (char *) &(MySQLStackData.LineNumber);
-	bindStackData[5].is_null = 0;
-	bindStackData[5].length = 0;
-
-	return (mysql_stmt_bind_param(StackLogStmt, bindStackData) ? FAILURE
 			: SUCCESS);
 }
 
@@ -165,10 +129,7 @@ static int prepareQueries(void)
 	result = result && (MasterLogStmt) && (StackLogStmt);
 	result = result && !mysql_stmt_prepare(MasterLogStmt,
 			INSERT_MASTER_LOG_QUERY, strlen(INSERT_MASTER_LOG_QUERY) + 1);
-	result = result && !mysql_stmt_prepare(StackLogStmt,
-			INSERT_STACK_LOG_QUERY, strlen(INSERT_STACK_LOG_QUERY) + 1);
-	result = result && bindMasterQueryParameters()
-			&& bindStackQueryParameters();
+	result = result && bindMasterQueryParameters();
 	return result;
 }
 
@@ -177,7 +138,26 @@ static int exceuteQuery(MYSQL_STMT * stmt)
 	return (mysql_stmt_execute(stmt)) ? FAILURE : SUCCESS;
 }
 
-static int dumpMasterData(EXCEPTION_LOG_STRUCTURE *excp_p)
+static char * getStackData(STACKTRACE_STRUCTURE * stack_p, int stackCount,
+		unsigned long * stackSize)
+{
+	int i;
+	char tempBuf[MYSQL_BIND_BUFFER_LENGTH];
+	memset(StackInfo, 0, sizeof(StackInfo));
+	for (i = 0; i < stackCount; i++)
+	{
+		memset(tempBuf, 0, sizeof(tempBuf));
+		sprintf(tempBuf, "%s%s%s%s%s%s%s%d\n", FIELD_DELIMITER, getString(
+				stack_p[i].methodName), FIELD_DELIMITER, getString(
+				stack_p[i].methodSig), FIELD_DELIMITER, getString(
+				stack_p[i].className), FIELD_DELIMITER, stack_p[i].lineNumber);
+		strcat(StackInfo, tempBuf);
+	}
+	*stackSize = strlen(StackInfo);
+	return StackInfo;
+}
+
+static int dumpExceptionData(EXCEPTION_LOG_STRUCTURE *excp_p)
 {
 	memset(&MySQLMasterData, 0, sizeof(MySQLMasterData));
 
@@ -222,42 +202,10 @@ static int dumpMasterData(EXCEPTION_LOG_STRUCTURE *excp_p)
 
 	MySQLMasterData.sc = excp_p->frameCount;
 
+	strcpy(MySQLMasterData.StackInfo, getString(getStackData(
+			excp_p->stackTrace, excp_p->frameCount, &MySQLMasterData.lenSI)));
+
 	return (exceuteQuery(MasterLogStmt));
-}
-
-static int dumpStackData(STACKTRACE_STRUCTURE * stack_p, int stackCount,
-		long exceptionId)
-{
-	int i;
-	int result = SUCCESS;
-
-	for (i = 0; i < stackCount; i++)
-	{
-		memset(&MySQLStackData, 0, sizeof(MySQLStackData));
-
-		MySQLStackData.ExceptionId = exceptionId;
-
-		MySQLStackData.FrameId = i + 1;
-
-		strcpy(MySQLStackData.MethodName, getString(stack_p[i].methodName));
-		MySQLStackData.lenMN = (stack_p[i].methodName == NULL) ? 0 : strlen(
-				stack_p[i].methodName) + 1;
-
-		strcpy(MySQLStackData.MethodSignature, getString(stack_p[i].methodSig));
-		MySQLStackData.lenMSig = (stack_p[i].methodSig == NULL) ? 0 : strlen(
-				stack_p[i].methodSig) + 1;
-
-		strcpy(MySQLStackData.ClassName, getString(stack_p[i].className));
-		MySQLStackData.lenCN = (stack_p[i].className == NULL) ? 0 : strlen(
-				stack_p[i].className) + 1;
-
-		MySQLStackData.LineNumber = stack_p[i].lineNumber;
-
-		result = result && (exceuteQuery(StackLogStmt) ? SUCCESS : FAILURE);
-		if (result == FAILURE)
-			break;
-	}
-	return result;
 }
 
 static void closeDBConnection()
@@ -271,40 +219,13 @@ static void closeDBConnection()
 static void * logInThread(void * msg)
 {
 	EXCEPTION_LOG_STRUCTURE * excp_p = (EXCEPTION_LOG_STRUCTURE *) msg;
-	long exceptionId;
 	memset(ErrorStr, 0, sizeof(ErrorStr));
 
-	if (dumpMasterData(excp_p) != SUCCESS)
+	if (dumpExceptionData(excp_p) != SUCCESS)
 	{
 		sprintf(ErrorStr, "MasterData Could not be dumped in db: Error %s",
 				getString((char *) mysql_error(Conn)));
 		logError(ErrorStr);
-	}
-	else
-	{
-		if (excp_p->stackTrace != NULL)
-		{
-			exceptionId = mysql_insert_id(Conn);
-			if (exceptionId != 0)
-			{
-				if (dumpStackData(excp_p->stackTrace, excp_p->frameCount,
-						exceptionId) != SUCCESS)
-				{
-					sprintf(ErrorStr,
-							"StackData Could not be dumped in db: Error %s",
-							getString((char *) mysql_error(Conn)));
-					logError(ErrorStr);
-				}
-			}
-			else
-			{
-				sprintf(
-						ErrorStr,
-						"StackData Could not be dumped in db. ExceptionId returned zero for Inserted Master Data");
-				logError(ErrorStr);
-			}
-
-		}
 	}
 	return NULL;
 }

@@ -35,16 +35,15 @@
 #include "header.h"
 #include "QueueThreadHeader.h"
 
-#define MAX_DB_ERROR_MESSAGE_LENGTH 65536
+#define MAX_DB_ERROR_MESSAGE_LENGTH 65535
 
-#define MYSQL_BIND_BUFFER_LENGTH 4096
+#define MYSQL_BIND_BUFFER_LENGTH 65535
 
 #define INSERT_MASTER_LOG_QUERY "insert into tbl_ExceptionLog (TimeStamp, ExceptionMsg, ExceptionType, SourceFileName, \
-		ThreadName, CatchMethodName, CatchMethodSignature, CatchClassName, CatchLineNumber, StackFrameCount) \
-		values (?,?,?,?,?,?,?,?,?,?)"
+		ThreadName, CatchMethodName, CatchMethodSignature, CatchClassName, CatchLineNumber, StackFrameCount, Stack) \
+		values (?,?,?,?,?,?,?,?,?,?,?)"
 
-#define INSERT_STACK_LOG_QUERY "insert into tbl_StackLog (ExceptionId, FrameId, MethodName, MethodSignature, \
-		ClassName, LineNumber) values (?,?,?,?,?,?)"
+#define FIELD_DELIMITER "~"
 
 struct MySQLMaster
 {
@@ -63,22 +62,12 @@ struct MySQLMaster
 	unsigned long lenCMSig;
 	char CatchClassName[MYSQL_BIND_BUFFER_LENGTH];
 	unsigned long lenCCN;
+	char StackInfo[MYSQL_BIND_BUFFER_LENGTH];
+	unsigned long lenSI;
 	int ln;
 	int sc;
 };
 
-struct MySQLStack
-{
-	int ExceptionId;
-	int FrameId;
-	char MethodName[MYSQL_BIND_BUFFER_LENGTH];
-	unsigned long lenMN;
-	char MethodSignature[MYSQL_BIND_BUFFER_LENGTH];
-	unsigned long lenMSig;
-	char ClassName[MYSQL_BIND_BUFFER_LENGTH];
-	unsigned long lenCN;
-	int LineNumber;
-};
 #endif
 
 /* MYSQLHEADER_H_ */
